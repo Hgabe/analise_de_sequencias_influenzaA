@@ -5,9 +5,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
+import matplotlib.patches as mpatches
 
 download_path = r"D:\codigopython\ArqFasta"
-comcodons = False
+comcodons = True
 data = []
 
 # Regex ajustado para extrair corretamente Host1 e Host2
@@ -121,11 +122,52 @@ if comcodons:
 
     # Transforma a lista de dicionários em colunas
     codon_df = pd.DataFrame.from_records(codon_dicts).fillna(0).astype(int)
-
-    # Junta ao DataFrame original
     df_codons = pd.concat([df.reset_index(drop=True), codon_df.reset_index(drop=True)], axis=1)
-    print(df_codons)
+    codon_dfs = pd.concat([df["Segment"].reset_index(drop=True), codon_df.reset_index(drop=True)], axis=1)
+    
+    def geraboxplot():
+        estatisticas_codons = pd.DataFrame({
+            "total": codon_df.sum(),
+            "Media": codon_df.mean(),
+            "DesvioPadrao": codon_dfs.std()
+        })
+        estatisticas_codons.to_csv(os.path.join(download_path, f"estatisticas_codons_{segment}.csv"))
+
+        codon_df_sorted = codon_dfs[sorted(codon_df.columns)]
+        sns.boxplot(data=codon_df_sorted, color="lightgray", boxprops=dict(facecolor='gray'))
+        
+        mean_values = codon_df_sorted.mean()
+        std_values = codon_df_sorted.std()
+
+        for i, (mean, std) in enumerate(zip(mean_values, std_values)):
+            plt.text(i, std, '__', ha='center', va='center', color='blue', fontsize=10)
+            plt.text(i, mean, '__', ha='center', va='center', color='red', fontsize=10)
+
+        plt.title("Box Plot com Média e Desvio Padrão dos Códons de Sequências do Vírus Influenza A Para o Gene " + segment)
+        plt.xlabel("Códons")
+        plt.ylabel("Contagem")
+        plt.xticks(rotation=90)
+
+        media_patch = mpatches.Patch(color='red', label='Média')
+        dp_patch = mpatches.Patch(color='blue', label='Desvio Padrão')
+        mediana_patch = mpatches.Patch(color='black', label='mediana')
+        plt.legend(handles=[media_patch, dp_patch, mediana_patch], loc='upper right', bbox_to_anchor=(1, 1))
+
+        plt.tight_layout()
+        plt.show()
+
+    # Filtra e plota apenas para segmentos específicos
+    segment = "NA"
+    codon_dfs = df_codons[df_codons["Segment"] == segment]
+    geraboxplot()
+
+    segment = "HA"
+    codon_dfs = df_codons[df_codons["Segment"] == segment]
+    geraboxplot()
+
     df.info()
+    
+    
     # Junta apenas a coluna "ID" com as contagens dos códons
     codon_usage_table = pd.concat([df["ID"].reset_index(drop=True), codon_df.reset_index(drop=True)], axis=1)
 
@@ -138,9 +180,9 @@ if comcodons:
 
     
     print(f"Arquivo com ID e contagens de códons salvo em: {codon_csv_path}")
-else:
-    print(df)
-    df.info()
+
+print(df)
+df.info()
 
 count_atg = df["Sequence"].str.startswith("ATG").sum()
 print(f"Número de sequências que começam com 'ATG': {count_atg}")
