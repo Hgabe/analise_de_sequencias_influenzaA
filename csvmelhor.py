@@ -129,7 +129,7 @@ if comcodons:
         estatisticas_codons = pd.DataFrame({
             "total": codon_df.sum(),
             "Media": codon_df.mean(),
-            "DesvioPadrao": codon_dfs.std()
+            "DesvioPadrao": codon_df.std()
         })
         estatisticas_codons.to_csv(os.path.join(download_path, f"estatisticas_codons_{segment}.csv"))
 
