@@ -9,9 +9,9 @@ import time
 import os
 
 
-download_path = r"D:\codigopython\ArqFasta"  
+download_path = r"D:\codigopython\PROGRESSDOCODIGO\ArqFasta"  
 
-# Configurar opções do Chrome
+
 chrome_options = Options()
 chrome_options.add_experimental_option("prefs", {
     "download.default_directory": download_path,  
@@ -20,16 +20,15 @@ chrome_options.add_experimental_option("prefs", {
     "safebrowsing.enabled": True                
 })
 
-# Configurar o ChromeDriver
+
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
 def is_download_complete(download_dir):
-    # Listar os arquivos no diretório de download
+ 
     files = os.listdir(download_dir)
     for file in files:
         file_path = os.path.join(download_dir, file)
-        # Verifica se o arquivo tem o sufixo .crdownload (significa que não foi totalmente baixado) (na hora parece não funcionar mas reduz muito os erros)
         if file.endswith('.crdownload'):
             return False
     return True
@@ -43,14 +42,13 @@ def get_file(bf):
     return None
 
 
-# Abrir a página do NCBI
 url = "https://www.ncbi.nlm.nih.gov/genomes/FLU/Database/nph-select.cgi#mainform"
 driver.get(url)
 
 
 
 
-# Aguarde até que o botão de nucleotídeo esteja presente e clique nele
+
 try:
     nucleotide_button = WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.XPATH, '//input[@name="sequence" and @value="N"]'))
@@ -60,7 +58,7 @@ try:
 except Exception as e:
     print(f"Ocorreu um erro ao clicar no botão de nucleotídeo: {e}")
 
-# Selecione "Type A"
+
 try:
     select_type = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.NAME, 'type'))
@@ -71,18 +69,19 @@ try:
 except Exception as e:
     print(f"Ocorreu um erro ao selecionar o tipo 'A': {e}")
 
-# Selecione "Avian" no dropdown de Host
+
 try:
     select_host = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.NAME, 'host'))
     )
     select = Select(select_host)
+    select.deselect_all()
     select.select_by_visible_text('Avian')
     print("Host 'Avian' selecionado com sucesso!")
 except Exception as e:
     print(f"Ocorreu um erro ao selecionar o host 'Avian': {e}")
 
-# Selecione "HA" no dropdown de Segment
+
 try:
     select_segment = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.NAME, 'segment'))
@@ -97,7 +96,7 @@ except Exception as e:
 x=0
 def aposseg():
     
-# Clique no checkbox "Full-length only"
+
     try:
         full_length_checkbox = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, '//input[@name="sonly"]'))
@@ -107,7 +106,7 @@ def aposseg():
     except Exception as e:
         print(f"Ocorreu um erro ao clicar no checkbox 'Full-length only': {e}")
 
-    # Selecione o checkbox "reqseg_full"
+ 
     try:
         reqseg_full_checkbox = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, '//input[@name="reqseg_full" and @value="complete"]'))
@@ -117,7 +116,7 @@ def aposseg():
     except Exception as e:
         print(f"Ocorreu um erro ao clicar no checkbox 'reqseg_full': {e}")
 
-    # Selecione o checkbox "reqseg"
+    
     try:
         reqseg_checkbox = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, '//input[@name="reqseg" and @value="4"]'))
@@ -127,7 +126,7 @@ def aposseg():
     except Exception as e:
         print(f"Ocorreu um erro ao clicar no checkbox 'reqseg': {e}")
 
-    # Selecione a opção "Exclude" no dropdown "vac_strain"
+   
     try:
         select_vac_strain = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.NAME, 'vac_strain'))
@@ -138,7 +137,7 @@ def aposseg():
     except Exception as e:
         print(f"Ocorreu um erro ao selecionar no dropdown 'vac_strain': {e}")
 
-    # Selecione a opção "Exclude" no dropdown "subtype_mix"
+ 
     try:
         select_subtype_mix = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.NAME, 'subtype_mix'))
@@ -149,44 +148,52 @@ def aposseg():
     except Exception as e:
         print(f"Ocorreu um erro ao selecionar no dropdown 'subtype_mix': {e}")
 
-    # Loop para H de H1 até H18
+    try:
+        select_host = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.NAME, 'host'))
+        )
+        select = Select(select_host)
+        select.deselect_all() 
+        select.select_by_visible_text('Avian') 
+        print("Host 'Avian' REINICIADO com sucesso para o primeiro loop!")
+    except Exception as e:
+        print(f"Ocorreu um erro ao selecionar o host 'Avian': {e}")
     for h in range(1, 19):
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.NAME, 'subtype_n'))
         )
         subtype_h = str(h)
         
-        # Loop para N de N1 até N11
+   
         for n in range(1, 12):
             subtype_n = str(n)
             bf = set(os.listdir(download_path))
-            # Selecionar H
+ 
             try:
                 select_h = Select(driver.find_element(By.NAME, 'subtype_h'))
                 select_h.deselect_all()
                 select_h.select_by_visible_text(subtype_h)
                 print(f"Subtipo H '{subtype_h}' selecionado com sucesso!")
 
-                # Selecionar N
+          
                 select_n = Select(driver.find_element(By.NAME, 'subtype_n'))
                 select_n.deselect_all()
                 select_n.select_by_visible_text(subtype_n)
                 print(f"Subtipo N '{subtype_n}' selecionado com sucesso!")
 
-                # Clique no botão 'Show results'
+               
                 show_results_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, '//span[@class="default combined"]//input[@name="cmd_get_query"]'))
                 )
                 show_results_button.click()
                 print(f"Botão 'Show results' clicado para H{subtype_h}N{subtype_n}!")
 
-                # Aguarde um pouco entre as iterações
+               
                 time.sleep(1)
-                windows = driver.window_handles  # Captura todas as janelas abertas
+                windows = driver.window_handles  
                 if len (windows)>1:
-                    driver.switch_to.window(windows[-1])  # Muda para a última janela (a nova)
-                # Agora, clique no botão de "Download"
-                # Aguarde até que o botão de "Download" esteja visível e habilitado
+                    driver.switch_to.window(windows[-1]) 
+                
                 try:
                     download_button = WebDriverWait(driver, 30).until(
                         EC.visibility_of_element_located((By.NAME, 'download-button'))
@@ -207,15 +214,13 @@ def aposseg():
                 except Exception as e:
                     print(f"Erro ao clicar no botão de 'Download': {e}")
 
-
-                # Aguarde um pouco após o clique
                 time.sleep(1)
                 if len (windows)>2:
                     
-                    driver.close()  # Volta para a página onde as seleções foram feitas
-                    windows = driver.window_handles  # Captura todas as janelas abertas
-                    driver.switch_to.window(windows[-1])  # Muda para a última janela (a nova)
-                    # Aguarde um pouco após voltar
+                    driver.close() 
+                    windows = driver.window_handles 
+                    driver.switch_to.window(windows[-1])  
+              
                     time.sleep(1)
                 
                 else:
@@ -224,53 +229,52 @@ def aposseg():
             except Exception as e:
                 print(f"Ocorreu um erro ao processar H{subtype_h}N{subtype_n}: {e}")
 
-    # Após o loop de "Avian", desmarque a seleção de "Avian" e selecione "Human"
+    
     try:
-        # Desmarque a opção "Avian"
+        
         select_host = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.NAME, 'host'))
         )
         select = Select(select_host)
-        select.deselect_all()  # Desmarcar todas as opções
+        select.deselect_all() 
 
-        # Selecione "Human" no dropdown de Host
-        select.select_by_visible_text('Human')  # Seleciona a opção "Human"
+        
+        select.select_by_visible_text('Human') 
         print("Host 'Human' selecionado com sucesso!")
 
-        # Repetir o loop de H e N para "Human"
+        
         for h in range(1, 19):
             subtype_h = str(h)
             
             for n in range(1, 12):
                 subtype_n = str(n)
                 bf = set(os.listdir(download_path))
-                # Selecionar H
+         
                 try:
                     select_h = Select(driver.find_element(By.NAME, 'subtype_h'))
                     select_h.deselect_all()
                     select_h.select_by_visible_text(subtype_h)
                     print(f"Subtipo H '{subtype_h}' selecionado com sucesso!")
 
-                    # Selecionar N
+                   
                     select_n = Select(driver.find_element(By.NAME, 'subtype_n'))
                     select_n.deselect_all()
                     select_n.select_by_visible_text(subtype_n)
                     print(f"Subtipo N '{subtype_n}' selecionado com sucesso!")
 
-                    # Clique no botão 'Show results'
+                    
                     show_results_button = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, '//span[@class="default combined"]//input[@name="cmd_get_query"]'))
                     )
                     show_results_button.click()
                     print(f"Botão 'Show results' clicado para H{subtype_h}N{subtype_n}!")
 
-                    # Aguarde um pouco entre as iterações
+             
                     time.sleep(1)
-                    windows = driver.window_handles  # Captura todas as janelas abertas
+                    windows = driver.window_handles 
                     if len (windows)>2:
-                        driver.switch_to.window(windows[-1])  # Muda para a última janela (a nova)
-                    # Agora, clique no botão de "Download"
-                    # Aguarde até que o botão de "Download" esteja visível e habilitado
+                        driver.switch_to.window(windows[-1])
+                    
                     try:
                         download_button = WebDriverWait(driver, 30).until(
                             EC.visibility_of_element_located((By.NAME, 'download-button'))
@@ -288,21 +292,21 @@ def aposseg():
                             renamed_file_path = os.path.join(download_path, f"H{subtype_h}N{subtype_n}(human){suffix}.fa")
                             os.rename(new_file_path, renamed_file_path)
 
-                            #teste
+                       
                             
                             
                     except Exception as e:
                         print(f"Erro ao clicar no botão de 'Download': {e}")
 
 
-                    # Aguarde um pouco após o clique
+                    
                     time.sleep(1)
                     if len (windows)>2:
                         
-                        driver.close()  # Volta para a página onde as seleções foram feitas
-                        windows = driver.window_handles  # Captura todas as janelas abertas
-                        driver.switch_to.window(windows[-1])  # Muda para a última janela (a nova)
-                        # Aguarde um pouco após voltar
+                        driver.close()  
+                        windows = driver.window_handles  
+                        driver.switch_to.window(windows[-1])
+                        
                         time.sleep(1)
                     
                     else:
@@ -314,53 +318,51 @@ def aposseg():
     except Exception as e:
         print(f"Ocorreu um erro ao selecionar o host 'Human': {e}")
 
-    # Após o loop de "Human", desmarque a seleção de "Human" e selecione "Swine"
+    
     try:
-        # Desmarque a opção "Human"
+        
         select_host = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.NAME, 'host'))
         )
         select = Select(select_host)
-        select.deselect_all()  # Desmarcar todas as opções
+        select.deselect_all()  
 
-        # Selecione "Swine" no dropdown de Host
-        select.select_by_visible_text('Swine')  # Seleciona a opção "Swine"
+        
+        select.select_by_visible_text('Swine') 
         print("Host 'Swine' selecionado com sucesso!")
 
-        # Repetir o loop de H e N para "Swine"
-        for h in range(1, 19):#h19n12
+        for h in range(1, 19):
             subtype_h = str(h)
             
             for n in range(1, 12):
                 subtype_n = str(n)
                 bf = set(os.listdir(download_path))
-                # Selecionar H
+           
                 try:
                     select_h = Select(driver.find_element(By.NAME, 'subtype_h'))
                     select_h.deselect_all()
                     select_h.select_by_visible_text(subtype_h)
                     print(f"Subtipo H '{subtype_h}' selecionado com sucesso!")
 
-                    # Selecionar N
+                    
                     select_n = Select(driver.find_element(By.NAME, 'subtype_n'))
                     select_n.deselect_all()
                     select_n.select_by_visible_text(subtype_n)
                     print(f"Subtipo N '{subtype_n}' selecionado com sucesso!")
 
-                    # Clique no botão "Show results"
+                    
                     show_results_button = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, '//span[@class="default combined"]//input[@name="cmd_get_query"]'))
                     )
                     show_results_button.click()
                     print(f"Botão 'Show results' clicado para H{subtype_h}N{subtype_n}!")
 
-                    # Aguarde um pouco entre as iterações
+                
                     time.sleep(1)
-                    windows = driver.window_handles  # Captura todas as janelas abertas
+                    windows = driver.window_handles 
                     if len (windows)>2:
-                        driver.switch_to.window(windows[-1])  # Muda para a última janela (a nova)
-                    # Agora, clique no botão de "Download"
-                    # Aguarde até que o botão de "Download" esteja visível e habilitado
+                        driver.switch_to.window(windows[-1]) 
+                    
                     try:
                         download_button = WebDriverWait(driver, 30).until(
                             EC.visibility_of_element_located((By.NAME, 'download-button'))
@@ -382,14 +384,13 @@ def aposseg():
                         print(f"Erro ao clicar no botão de 'Download': {e}")
 
 
-                    # Aguarde um pouco após o clique
+                    
                     time.sleep(1)
                     if len (windows)>2:
                         
-                        driver.close()  # Volta para a página onde as seleções foram feitas
-                        windows = driver.window_handles  # Captura todas as janelas abertas
-                        driver.switch_to.window(windows[-1])  # Muda para a última janela (a nova)
-                        # Aguarde um pouco após voltar
+                        driver.close()  
+                        windows = driver.window_handles  
+                        driver.switch_to.window(windows[-1])  
                         time.sleep(1)
                     
                     else:
@@ -408,12 +409,12 @@ try:
     select = Select(select_segment)
     select.select_by_value('6')
     select.deselect_by_value('4')
-    print("Segmento 'NA' selecionado com sucesso!") #esta marcando junto ha
+    print("Segmento 'NA' selecionado com sucesso!") 
     x =x +1
 except Exception as e:
     print(f"Ocorreu um erro ao selecionar o segmento 'NA': {e}")
 
 
 aposseg()
-# Fechar o navegador
+
 driver.quit()
