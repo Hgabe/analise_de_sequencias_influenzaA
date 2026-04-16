@@ -1,0 +1,11 @@
+biopython
+pandas
+numpy
+matplotlib
+seaborn
+selenium
+webdriver-manager
+geopy
+pycountry
+pycountry-convert
+googletrans==4.0.0-rc1
