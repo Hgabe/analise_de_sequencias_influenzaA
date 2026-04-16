@@ -1,6 +1,6 @@
 ## Descrição
 
-Este projeto realiza uma análise bioinformática completa das sequências dos genes HA (Hemaglutinina) e NA (Neuraminidase) do vírus Influenza A, abrangendo hospedeiros aviário, humano e suíno.
+Este projeto para iniciação científica de bioinformática do período de 09/2024 – 08/2025 realiza uma análise bioinformática completa das sequências dos genes HA (Hemaglutinina) e NA (Neuraminidase) do vírus Influenza A, abrangendo hospedeiros aviário, humano e suíno.
 
 O pipeline é dividido em quatro etapas principais:
 
