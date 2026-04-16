@@ -3,45 +3,43 @@ import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import seaborn as sns
 from collections import Counter
-import matplotlib.patches as mpatches
+
+HERE = os.path.abspath(os.path.dirname(__file__))
+DOWNLOAD_PATH = os.path.join(HERE, 'ArqFasta')
+COM_CODONS = True
 
 
-here = os.path.abspath(os.path.dirname(__file__))
+# ---------------------------------------------------------------------------- #
+#                              LEITURA DOS DADOS                               #
+# ---------------------------------------------------------------------------- #
 
+def carregar_dados(download_path: str) -> list:
+    identifier_pattern = re.compile(
+        r"(?P<ID>[^\s]+)\s(?P<Host1>[A-Z])\/(?P<Host2>[^/]+(?:\s[^/]+)*)\/(?P<Location>[^\/]+)\/(?P<Data>[^/]+)\/(?P<Sequence_type>[^\s]+)\s"
+    )
 
-download_path = os.path.join(here, 'ArqFasta')
+    data = []
+    for file_name in os.listdir(download_path):
+        if not file_name.endswith(".fa"):
+            continue
 
-comcodons = True
-data = []
-
-# Regex ajustado para extrair corretamente Host1 e Host2
-identifier_pattern = re.compile(
-    r"(?P<ID>[^\s]+)\s(?P<Host1>[A-Z])\/(?P<Host2>[^/]+(?:\s[^/]+)*)\/(?P<Location>[^\/]+)\/(?P<Data>[^/]+)\/(?P<Sequence_type>[^\s]+)\s"
-)
-
-for file_name in os.listdir(download_path):
-    if file_name.endswith(".fa"):
         file_path = os.path.join(download_path, file_name)
 
-        # Captura do nome da classe assim: (x)
-        class_match = re.search(r"\((.*?)\)", file_name)
-        class_name = class_match.group(1) if class_match else "Unknown"
+        class_name = re.search(r"\((.*?)\)", file_name)
+        class_name = class_name.group(1) if class_name else "Unknown"
 
-        # Captura do nome do segmento assim: _x_
-        segment_match = re.search(r"_(.*?)_", file_name)
-        segment = segment_match.group(1) if segment_match else "Unknown"
+        segment = re.search(r"_(.*?)_", file_name)
+        segment = segment.group(1) if segment else "Unknown"
 
-        # Captura o HxNx no nome
-        hxnx_match = re.search(r"^(H\d+N\d+)", file_name)
-        hxnx = hxnx_match.group(1) if hxnx_match else "Unknown"
+        hxnx = re.search(r"^(H\d+N\d+)", file_name)
+        hxnx = hxnx.group(1) if hxnx else "Unknown"
 
-        # Abre o arquivo fasta
         with open(file_path, "r") as fasta_file:
             identifier = ""
             sequence = ""
-
             for line in fasta_file:
                 line = line.strip()
                 if line.startswith(">"):
@@ -55,384 +53,294 @@ for file_name in os.listdir(download_path):
             if identifier and sequence:
                 data.append([identifier, sequence, class_name, segment, hxnx])
 
-# Aplica regex para extrair colunas
-data_cleaned = []
-for entry in data:
-    match = identifier_pattern.match(entry[0])
-    if match:
-        ID = match.group("ID")
-        Host1 = match.group("Host1")
-        Host2 = match.group("Host2")
-        Location = match.group("Location")
-        Data = match.group("Data")
-        Sequence_type = match.group("Sequence_type")
-
-        data_cleaned.append([
-            ID, Host1, Host2, Location, Data, Sequence_type,
-            entry[1], entry[2], entry[3], entry[4]
-        ])
-
-# Cria DataFrame
-df = pd.DataFrame(data_cleaned, columns=[
-    "ID", "Host1", "Host2", "Location", "Sequence_type", "Data",
-    "Sequence", "Class", "Segment", "HxNx"
-])
-
-df["Data"] = df["Data"].apply(lambda x: x[-4:] if len(x) > 4 else x)
+    return data, identifier_pattern
 
 
-# Salva o CSV
-csv_path = os.path.join(download_path, "csvcerto2.csv")
-df.to_csv(csv_path, index=False)
-print(f"Arquivo CSV salvo em: {csv_path}")
-# Corrige colunas embaralhadas por erros de estrutura no identificador
-df[["Data", "Sequence_type", "Location", "Host2"]] = df.apply(
-    lambda row: pd.Series([
-        row["Sequence_type"] if "/" in row["Data"] else row["Data"],
-        row["Location"] if "/" in row["Data"] else row["Sequence_type"],
-        row["Host2"] if "/" in row["Data"] else row["Location"],
-        np.nan if "/" in row["Data"] else row["Host2"]
-    ]),
-    axis=1
-)
+# ---------------------------------------------------------------------------- #
+#                            LIMPEZA E ESTRUTURAÇÃO                            #
+# ---------------------------------------------------------------------------- #
+
+def construir_dataframe(data: list, identifier_pattern) -> pd.DataFrame:
+    data_cleaned = []
+    for entry in data:
+        match = identifier_pattern.match(entry[0])
+        if match:
+            data_cleaned.append([
+                match.group("ID"),
+                match.group("Host1"),
+                match.group("Host2"),
+                match.group("Location"),
+                match.group("Data"),
+                match.group("Sequence_type"),
+                entry[1], entry[2], entry[3], entry[4]
+            ])
+
+    df = pd.DataFrame(data_cleaned, columns=[
+        "ID", "Host1", "Host2", "Location", "Sequence_type", "Data",
+        "Sequence", "Class", "Segment", "HxNx"
+    ])
+
+    df["Data"] = df["Data"].apply(lambda x: x[-4:] if len(x) > 4 else x)
+    return df
 
 
-# Correções de datas e remoção de registros inválidos
-df["Data"] = df["Data"].apply(lambda x: x[-4:] if len(x) > 4 else x)
-df["Data"] = df["Data"].str.replace(r"^([0-9]{2})$", r"19\1", regex=True)
-df = df[df["Data"].str.len() != 1]
-df = df[df["Data"].str.len() != 3]
-df["Data"] = df["Data"].apply(lambda x: x[1:] if len(x) == 5 else x)
-df["Data"] = df["Data"].apply(lambda x: x if x.isdigit() else None)
-df = df.dropna(subset=["Data"])
+def corrigir_colunas(df: pd.DataFrame) -> pd.DataFrame:
+    df[["Data", "Sequence_type", "Location", "Host2"]] = df.apply(
+        lambda row: pd.Series([
+            row["Sequence_type"] if "/" in row["Data"] else row["Data"],
+            row["Location"]      if "/" in row["Data"] else row["Sequence_type"],
+            row["Host2"]         if "/" in row["Data"] else row["Location"],
+            np.nan               if "/" in row["Data"] else row["Host2"]
+        ]),
+        axis=1
+    )
+    return df
 
+def limpar_datas(df: pd.DataFrame) -> pd.DataFrame:
+    df["Data"] = df["Data"].apply(lambda x: x[-4:] if len(x) > 4 else x)
+    df["Data"] = df["Data"].str.replace(r"^([0-9]{2})$", r"19\1", regex=True)
+    df = df[df["Data"].str.len() != 1]
+    df = df[df["Data"].str.len() != 3]
+    df["Data"] = df["Data"].apply(lambda x: x[1:] if len(x) == 5 else x)
+    df["Data"] = df["Data"].apply(lambda x: x if x.isdigit() else None)
+    df = df.dropna(subset=["Data"])
+    return df
 
-# Geração do gráfico
-df_counts = df.groupby(["Data", "Segment"]).size().unstack(fill_value=0)
-df_counts.plot(kind="bar", stacked=False, color=["blue", "red"])
-plt.show()
+def filtrar_sequencias_validas(df: pd.DataFrame) -> pd.DataFrame:
+    df["Not_AGCT"] = df["Sequence"].apply(
+        lambda seq: np.nan if all(c in "AGCT" for c in seq)
+        else sum(1 for c in seq if c not in "AGCT")
+    )
+    df = df[df["Not_AGCT"].isna()].copy()
+    df["Nucleotides_count"] = df["Sequence"].apply(len)
+    df["Codons_count"] = df["Sequence"].apply(lambda seq: len(seq) // 3)
+    return df
 
-# Se a sequencia so tiver caracteres validos apresenta NaN 
-df["Not_AGCT"] = df["Sequence"].apply(lambda seq: np.nan if all(c in "AGCT" for c in seq) else sum(1 for c in seq if c not in "AGCT"))
-df = df[df["Not_AGCT"].isna()]
-df["Nucleotides_count"] = df["Sequence"].apply(lambda seq: len (seq))
-df["Codons_count"] = df["Sequence"].apply(lambda seq: len (seq)//3)
-if comcodons:
-    def contar_codons(seq):
-        codons = [seq[i:i+3] for i in range(0, len(seq) - 2, 3) if len(seq[i:i+3]) == 3]
-        return dict(Counter(codons))
+# ---------------------------------------------------------------------------- #
+#                             ANÁLISE DE CÓDONS                                #
+# ---------------------------------------------------------------------------- #
 
-    # Aplica a função para cada linha da coluna "Sequence"
+def contar_codons(seq: str) -> dict:
+    codons = [seq[i:i+3] for i in range(0, len(seq) - 2, 3) if len(seq[i:i+3]) == 3]
+    return dict(Counter(codons))
+
+def gerar_tabela_codons(df: pd.DataFrame) -> pd.DataFrame:
     codon_dicts = df["Sequence"].apply(contar_codons)
-
-    # Transforma a lista de dicionários em colunas
     codon_df = pd.DataFrame.from_records(codon_dicts).fillna(0).astype(int)
-    df_codons = pd.concat([df.reset_index(drop=True), codon_df.reset_index(drop=True)], axis=1)
-    codon_dfs = pd.concat([df["Segment"].reset_index(drop=True), codon_df.reset_index(drop=True)], axis=1)
-    
-    def geraboxplot():
-        estatisticas_codons = pd.DataFrame({
-            "total": codon_df.sum(),
-            "Media": codon_df.mean(),
-            "DesvioPadrao": codon_df.std()
-        })
-        estatisticas_codons.to_csv(os.path.join(download_path, f"estatisticas_codons_{segment}.csv"))
+    return codon_df.reset_index(drop=True)
 
-        codon_df_sorted = codon_dfs[sorted(codon_df.columns)]
-        sns.boxplot(data=codon_df_sorted, color="lightgray", boxprops=dict(facecolor='gray'))
-        
-        mean_values = codon_df_sorted.mean()
-        std_values = codon_df_sorted.std()
+def salvar_estatisticas_codons(codon_df: pd.DataFrame, segment: str, download_path: str):
+    estatisticas = pd.DataFrame({
+        "total": codon_df.sum(),
+        "Media": codon_df.mean(),
+        "DesvioPadrao": codon_df.std()
+    })
+    estatisticas.to_csv(os.path.join(download_path, f"estatisticas_codons_{segment}.csv"))
 
-        for i, (mean, std) in enumerate(zip(mean_values, std_values)):
-            plt.text(i, std, '__', ha='center', va='center', color='blue', fontsize=10)
-            plt.text(i, mean, '__', ha='center', va='center', color='red', fontsize=10)
+# ---------------------------------------------------------------------------- #
+#                               VISUALIZAÇÕES                                  #
+# ---------------------------------------------------------------------------- #
 
-        plt.title("Box Plot com Média e Desvio Padrão dos Códons de Sequências do Vírus Influenza A Para o Gene " + segment)
-        plt.xlabel("Códons")
-        plt.ylabel("Contagem")
-        plt.xticks(rotation=90)
+def plotar_distribuicao_por_data(df: pd.DataFrame):
+    df_counts = df.groupby(["Data", "Segment"]).size().unstack(fill_value=0)
+    df_counts.plot(kind="bar", stacked=False, color=["blue", "red"])
+    plt.title("Distribuição de Sequências por Ano e Segmento")
+    plt.xlabel("Ano")
+    plt.ylabel("Contagem")
+    plt.tight_layout()
+    plt.show()
 
-        media_patch = mpatches.Patch(color='red', label='Média')
-        dp_patch = mpatches.Patch(color='blue', label='Desvio Padrão')
-        mediana_patch = mpatches.Patch(color='black', label='mediana')
-        plt.legend(handles=[media_patch, dp_patch, mediana_patch], loc='upper right', bbox_to_anchor=(1, 1))
+def plotar_boxplot_codons(codon_df: pd.DataFrame, segment: str, titulo: str):
+    codon_df_sorted = codon_df[sorted(codon_df.columns)]
 
-        plt.tight_layout()
-        plt.show()
+    mean_values = codon_df_sorted.mean()
+    std_values  = codon_df_sorted.std()
 
-    # Filtra e plota apenas para segmentos específicos
-    segment = "NA"
-    codon_dfs = df_codons[df_codons["Segment"] == segment]
-    geraboxplot()
+    sns.boxplot(data=codon_df_sorted, color="lightgray", boxprops=dict(facecolor='gray'))
 
-    segment = "HA"
-    codon_dfs = df_codons[df_codons["Segment"] == segment]
-    geraboxplot()
+    for i, (mean, std) in enumerate(zip(mean_values, std_values)):
+        plt.text(i, std,  '__', ha='center', va='center', color='blue', fontsize=10)
+        plt.text(i, mean, '__', ha='center', va='center', color='red',  fontsize=10)
 
-    
-    
-    
-    # Junta apenas a coluna "ID" com as contagens dos códons
-    codon_usage_table = pd.concat([df["ID"].reset_index(drop=True), codon_df.reset_index(drop=True)], axis=1)
+    media_patch   = mpatches.Patch(color='red',   label='Média')
+    dp_patch      = mpatches.Patch(color='blue',  label='Desvio Padrão')
+    mediana_patch = mpatches.Patch(color='black', label='Mediana')
+    plt.legend(handles=[media_patch, dp_patch, mediana_patch], loc='upper right', bbox_to_anchor=(1, 1))
 
-    # Define o caminho para salvar o CSV
-    codon_csv_path = os.path.join(download_path, "codon_usage_table.csv")
+    plt.title(titulo)
+    plt.xlabel("Códons")
+    plt.ylabel("Contagem")
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.show()
 
-    # Salva em CSV
-    codon_usage_table.to_csv(codon_csv_path, index=False)
-    std_series = df_codons.drop(columns=df.columns).std()
+def plotar_boxplot_simples(codon_df: pd.DataFrame, titulo: str):
+    codon_df_sorted = codon_df[sorted(codon_df.columns)]
+    sns.boxplot(data=codon_df_sorted, color="lightgray", boxprops=dict(facecolor='gray'))
+    plt.title(titulo)
+    plt.xlabel("Códons")
+    plt.ylabel("Contagem")
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.show()
 
-    
-    print(f"Arquivo com ID e contagens de códons salvo em: {codon_csv_path}")
-    
-#------------------------------------------------------------------------------#
-                     #Explicação dos dataframes com nomes#
-                                #semelhantes#
-                           #e print do df basico#
-#------------------------------------------------------------------------------#
-print ("------------------------------------------------------------------------------")
-print ("                              Exibindo df basico                              ")
-print ("------------------------------------------------------------------------------")
-print(df)
+def plotar_comparacao_media(com_out: pd.DataFrame, sem_out: pd.DataFrame, segment: str):
+    comparacao = pd.DataFrame({
+        "sem_out": sem_out.mean(),
+        "com_out": com_out.mean()
+    })
+    comparacao.plot(kind="bar", color=["gray", "black"], alpha=0.8)
+    plt.xlabel("Códons")
+    plt.ylabel("Contagem Média")
+    plt.title(f"Comparação de Média de Códons com e sem Outliers ({segment})")
+    plt.xticks(rotation=90)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
-#codon_dfs possui as colunas basicas + contagem de cada codon(64 tipos)
-#codon_df possui apenas a contagem de cada codon(64 tipos)
+# ---------------------------------------------------------------------------- #
+#                           DETECÇÃO DE OUTLIERS                               #
+# ---------------------------------------------------------------------------- #
 
+def detectar_outliers(df: pd.DataFrame, codon_df: pd.DataFrame) -> tuple:
+    Q1  = codon_df.quantile(0.25)
+    Q3  = codon_df.quantile(0.75)
+    IQR = Q3 - Q1
+    outlier_mask = (codon_df < (Q1 - 1.5 * IQR)) | (codon_df > (Q3 + 1.5 * IQR))
 
+    outlier_df = codon_df[outlier_mask]
+    tabela_raw = pd.concat([df["ID"].reset_index(drop=True), outlier_df.reset_index(drop=True)], axis=1)
 
-#------------------------------------------------------------------------------#
-                     #Gera o Dataframe com os valores de#
-                      #desvio padrão e ID da sequencia#
-#------------------------------------------------------------------------------#
-Q1 = codon_df.quantile(0.25)
-Q3 = codon_df.quantile(0.75)
-IQR = Q3 - Q1
-outlier_mask = (codon_df < (Q1 - 1.5 * IQR)) | (codon_df > (Q3 + 1.5 * IQR))
-outlier_df = codon_df[outlier_mask]
-Tabela_De_Outliers = pd.concat([df["ID"].reset_index(drop=True), outlier_df.reset_index(drop=True)], axis=1)
+    # Formata: "valor(codon), valor(codon), ..."
+    def formatar_linha(row):
+        return [f"{val}({col})" for col, val in row.items() if pd.notna(val)]
 
+    linhas = tabela_raw.apply(formatar_linha, axis=1)
+    Tabela_De_Outliers = pd.DataFrame({"Valores": [", ".join(l) for l in linhas]})
+    Tabela_De_Outliers = Tabela_De_Outliers[Tabela_De_Outliers["Valores"].str.count(r"\(") >= 2]
 
+    df_out_temp = pd.concat([df["ID"].reset_index(drop=True), outlier_df.reset_index(drop=True)], axis=1)
+    df_out_temp["tem_out"] = (~df_out_temp.drop(columns="ID").isna().all(axis=1)).astype(int)
 
-#------------------------------------------------------------------------------#
-                        #Formata o .csv de outliers#
-#------------------------------------------------------------------------------#
-def formatar_valores(row):
-    return [f"{val}({col})" for col, val in row.items() if pd.notna(val)]
+    df_com_out = df_out_temp[df_out_temp["tem_out"] == 1].drop(columns="tem_out")
+    df_sem_out = df_out_temp[df_out_temp["tem_out"] == 0].drop(columns="tem_out")
 
-linhas_formatadas = Tabela_De_Outliers.apply(formatar_valores, axis=1)
+    return Tabela_De_Outliers, df_com_out, df_sem_out, outlier_mask
 
-Tabela_De_Outliers = pd.DataFrame({
-    "Valores": [", ".join(linha) for linha in linhas_formatadas]
-})
-#Tabela_De_Outliers = Tabela_De_Outliers[Tabela_De_Outliers["Valores"].str.contains(",", na=False)]
-Tabela_De_Outliers = Tabela_De_Outliers[Tabela_De_Outliers["Valores"].str.count(r"\(") >= 2]
+def codons_por_grupo(df: pd.DataFrame, codon_df: pd.DataFrame, ids: pd.Series, segment: str) -> pd.DataFrame:
+    df_filtrado = df[df["ID"].isin(ids)].reset_index(drop=True)
+    resultado = pd.concat([df_filtrado[["ID", "Segment"]], codon_df.reset_index(drop=True)], axis=1)
+    resultado = resultado.dropna(subset=["ID"])
+    return resultado[resultado["Segment"] == segment]
 
-Tabela_De_Outliers.to_csv(os.path.join(download_path, "Tabela_De_Outliers.csv"), index=False)
+# ---------------------------------------------------------------------------- #
+#                           PRINTS E RELATÓRIOS                                #
+# ---------------------------------------------------------------------------- #
 
-#------------------------------------------------------------------------------#
-           #Printa quantidade de sequencias terminadas em TAA,TGA,TAG#
-                           #ou iniciadas por ATG#
-#------------------------------------------------------------------------------#
-print ("------------------------------------------------------------------------------")
-print ("                      Exibindo inicios e fins específicos                     ")                  
-print ("------------------------------------------------------------------------------")
+def printar_secao(titulo: str):
+    borda = "-" * 78
+    print(f"\n{borda}")
+    print(f"{titulo:^78}")
+    print(borda)
 
-count_atg = df["Sequence"].str.startswith("ATG").sum()
-print(f"Número de sequências que começam com 'ATG': {count_atg}")
-count_taa = df["Sequence"].str.endswith("TAA").sum()
-print(f"Número de sequências que terminam com 'TAA': {count_taa}")
-count_tag = df["Sequence"].str.endswith("TAG").sum()
-print(f"Número de sequências que terminam com 'TAG': {count_tag}")
-count_tga = df["Sequence"].str.endswith("TGA").sum()
-print(f"Número de sequências que terminam com 'TGA': {count_tga}")
-print(f"Número total de sequêncais terminadas com TAG,TGA,TAA: {count_taa + count_tag + count_tga}")
+def relatorio_inicios_fins(df: pd.DataFrame):
+    printar_secao("Inícios e fins específicos")
+    print(f"Sequências que começam com 'ATG': {df['Sequence'].str.startswith('ATG').sum()}")
+    print(f"Sequências que terminam com 'TAA': {df['Sequence'].str.endswith('TAA').sum()}")
+    print(f"Sequências que terminam com 'TAG': {df['Sequence'].str.endswith('TAG').sum()}")
+    print(f"Sequências que terminam com 'TGA': {df['Sequence'].str.endswith('TGA').sum()}")
+    total_stop = (df["Sequence"].str.endswith("TAA") |
+                  df["Sequence"].str.endswith("TAG") |
+                  df["Sequence"].str.endswith("TGA")).sum()
+    print(f"Total terminadas com TAG, TGA ou TAA: {total_stop}")
 
-#------------------------------------------------------------------------------#
-                 #Exclui outliers de df e compara antes e depois#
-                        #NaN = valor dentro do padrão#
-#------------------------------------------------------------------------------#
+def main():
+    data, identifier_pattern = carregar_dados(DOWNLOAD_PATH)
 
-df_out_temp = codon_df[outlier_mask]
+    df = construir_dataframe(data, identifier_pattern)
+    df.to_csv(os.path.join(DOWNLOAD_PATH, "csvcerto2.csv"), index=False)
 
+    df = corrigir_colunas(df)
+    df = limpar_datas(df)
 
-print ("------------------------------------------------------------------------------")
-print ("                             Exibindo tabela out                              ")
-print ("------------------------------------------------------------------------------")
+    plotar_distribuicao_por_data(df)
 
-print(Tabela_De_Outliers)
+    df = filtrar_sequencias_validas(df)
 
+    printar_secao("DataFrame básico")
+    print(df)
 
-print ("------------------------------------------------------------------------------")
-print ("                       Exibindo sequencias com outliers                       ")
-print ("------------------------------------------------------------------------------")
+    if not COM_CODONS:
+        return
 
-df_out_temp = pd.concat([df["ID"].reset_index(drop=True), df_out_temp.reset_index(drop=True)], axis=1)
-df_out_temp["tem_out"] = (~df_out_temp.drop(columns="ID").isna().all(axis=1)).astype(int)
-df_com_out = df_out_temp[df_out_temp['tem_out'] == 1].drop(columns='tem_out')
+    codon_df = gerar_tabela_codons(df)
+    df_codons = pd.concat([df.reset_index(drop=True), codon_df], axis=1)
 
-df_com_out.to_csv(os.path.join(download_path, "df_com_out.csv"), index=False)
+    codon_usage_table = pd.concat([df["ID"].reset_index(drop=True), codon_df], axis=1)
+    codon_usage_table.to_csv(os.path.join(DOWNLOAD_PATH, "codon_usage_table.csv"), index=False)
 
-print(df_com_out)
-df_com_out.info()
+    for seg in ["NA", "HA"]:
+        subset = df_codons[df_codons["Segment"] == seg].drop(columns=df.columns, errors='ignore')
+        salvar_estatisticas_codons(subset, seg, DOWNLOAD_PATH)
+        plotar_boxplot_codons(
+            codon_df=subset,
+            segment=seg,
+            titulo=f"Box Plot com Média e Desvio Padrão dos Códons — Influenza A ({seg})"
+        )
 
+  
+    relatorio_inicios_fins(df)
 
-print ("------------------------------------------------------------------------------")
-print ("                       Exibindo sequencias sem outliers                       ")
-print ("------------------------------------------------------------------------------")
+    Tabela_De_Outliers, df_com_out, df_sem_out, outlier_mask = detectar_outliers(df, codon_df)
 
-df_sem_out = df_out_temp[df_out_temp['tem_out'] == 0].drop(columns='tem_out')
+    Tabela_De_Outliers.to_csv(os.path.join(DOWNLOAD_PATH, "Tabela_De_Outliers.csv"), index=False)
+    df_com_out.to_csv(os.path.join(DOWNLOAD_PATH, "df_com_out.csv"), index=False)
+    df_sem_out.to_csv(os.path.join(DOWNLOAD_PATH, "df_sem_out.csv"), index=False)
 
-df_sem_out.to_csv(os.path.join(download_path, "df_sem_out.csv"), index=False)
+    printar_secao("Tabela de Outliers")
+    print(Tabela_De_Outliers)
 
-print(df_sem_out)
-df_sem_out.info()
+    printar_secao("Sequências com outliers")
+    print(df_com_out)
+    df_com_out.info()
 
+    printar_secao("Sequências sem outliers")
+    print(df_sem_out)
+    df_sem_out.info()
 
+    for seg in ["HA", "NA"]:
+        com_out = codons_por_grupo(df, codon_df, df_com_out["ID"], seg)
+        sem_out = codons_por_grupo(df, codon_df, df_sem_out["ID"], seg)
 
+        printar_secao(f"Boxplot — sequências COM outliers ({seg})")
+        plotar_boxplot_simples(
+            com_out.drop(columns=["ID", "Segment"], errors='ignore'),
+            titulo=f"Box Plot dos Códons — Influenza A ({seg}) com Outliers"
+        )
+        print(com_out)
+        com_out.info()
 
-#------------------------------------------------------------------------------#
-                           #geração de boxplot#
-                        #para comparar sequencias#
-                           #com e sem outliers#
-#------------------------------------------------------------------------------#
-print ("------------------------------------------------------------------------------")
-print ("                           Exibindo todos os codons                           ")
-print ("                          de sequencias com outliers                          ")
-print ("------------------------------------------------------------------------------")
-df_filtrado = df[df["ID"].isin(df_com_out["ID"])].reset_index(drop=True)
+        printar_secao(f"Boxplot — sequências SEM outliers ({seg})")
+        plotar_boxplot_simples(
+            sem_out.drop(columns=["ID", "Segment"], errors='ignore'),
+            titulo=f"Box Plot dos Códons — Influenza A ({seg}) sem Outliers"
+        )
+        print(sem_out)
 
-todos_codons_com_out = pd.concat([df_filtrado[["ID", "Segment"]], codon_df.reset_index(drop=True)], axis=1)
-todos_codons_com_out = todos_codons_com_out.dropna(subset=["ID"])
-print(todos_codons_com_out)
-todos_codons_com_out.info()
+        printar_secao(f"Comparação com e sem outliers ({seg})")
+        plotar_comparacao_media(
+            com_out=com_out.drop(columns=["ID", "Segment"], errors='ignore'),
+            sem_out=sem_out.drop(columns=["ID", "Segment"], errors='ignore'),
+            segment=seg
+        )
 
+    printar_secao("Gerando arquivo FASTA com sequências com outliers")
+    sequencias_com_out = df[df["ID"].isin(df_com_out["ID"])]
+    output_path = os.path.join(DOWNLOAD_PATH, "filtrado.fa")
+    with open(output_path, "w") as f:
+        for _, row in sequencias_com_out.iterrows():
+            f.write(f">{row['ID']}\n{row['Sequence']}\n")
+    print(f"Arquivo FASTA salvo em: {output_path}")
 
-print ("------------------------------------------------------------------------------")
-print ("                               gerando boxplot                                ")
-print ("                          de sequencias com outliers                          ")
-print ("                                      HA                                      ")
-print ("------------------------------------------------------------------------------")
-
-todos_codons_com_out1 = todos_codons_com_out[todos_codons_com_out["Segment"] == "HA"]
-com_out_sorted = todos_codons_com_out1[sorted(todos_codons_com_out1.columns)]
-plt.title("Box Plot dos Códons de Sequências do Vírus Influenza A (HA) com Outliers")
-plt.xlabel("Códons")
-plt.ylabel("Contagem")
-plt.xticks(rotation=90)
-sns.boxplot(data=com_out_sorted, color="lightgray", boxprops=dict(facecolor='gray'))
-plt.show()
-print(com_out_sorted)
-com_out_sorted.info()
-# -------------------------------------
-# Gera o boxplot para segmento "NA"
-print ("------------------------------------------------------------------------------")
-print ("                               gerando boxplot                                ")
-print ("                          de sequencias com outliers                          ")
-print ("                                      NA                                      ")
-print ("------------------------------------------------------------------------------")
-
-todos_codons_com_out2 = todos_codons_com_out[todos_codons_com_out["Segment"] == "NA"]
-com_out_sorted2 = todos_codons_com_out2[sorted(todos_codons_com_out2.columns)]
-plt.title("Box Plot dos Códons de Sequências do Vírus Influenza A (NA) com Outliers")
-plt.xlabel("Códons")
-plt.ylabel("Contagem")
-plt.xticks(rotation=90)
-sns.boxplot(data=com_out_sorted2, color="lightgray", boxprops=dict(facecolor='gray'))
-plt.show()
-print(com_out_sorted2)
-com_out_sorted2.info()
-
-print ("------------------------------------------------------------------------------")
-print ("                           Exibindo todos os codons                           ")
-print ("                          de sequencias sem outliers                          ")
-print ("------------------------------------------------------------------------------")
-df_filtrado2 = df[df["ID"].isin(df_sem_out["ID"])].reset_index(drop=True)
-todos_codons_sem_out = pd.concat([df_filtrado2[["ID", "Segment"]], codon_df.reset_index(drop=True)], axis=1)
-todos_codons_sem_out = todos_codons_sem_out.dropna(subset=["ID"])
-print(todos_codons_sem_out)
-
-print ("------------------------------------------------------------------------------")
-print ("                               gerando boxplot                                ")
-print ("                          de sequencias sem outliers                          ")
-print ("                                      HA                                      ")
-print ("------------------------------------------------------------------------------")
-todos_codons_sem_out1 = todos_codons_sem_out[todos_codons_sem_out["Segment"] == "HA"]
-sem_out_sorted = todos_codons_sem_out1[sorted(todos_codons_sem_out1.columns)]
-plt.title("Box Plot dos Códons de Sequências do Vírus Influenza A (HA) sem Outliers")
-plt.xlabel("Códons")
-plt.ylabel("Contagem")
-plt.xticks(rotation=90)
-sns.boxplot(data=sem_out_sorted, color="lightgray", boxprops=dict(facecolor='gray'))
-plt.show()
-print(sem_out_sorted)
-
-print ("------------------------------------------------------------------------------")
-print ("                               gerando boxplot                                ")
-print ("                          de sequencias sem outliers                          ")
-print ("                                      NA                                      ")
-print ("------------------------------------------------------------------------------")
-todos_codons_sem_out2 = todos_codons_sem_out[todos_codons_sem_out["Segment"] == "NA"]
-sem_out_sorted2 = todos_codons_sem_out2[sorted(todos_codons_sem_out2.columns)]
-plt.title("Box Plot dos Códons de Sequências do Vírus Influenza A (NA) sem Outliers")
-plt.xlabel("Códons")
-plt.ylabel("Contagem")
-plt.xticks(rotation=90)
-sns.boxplot(data=sem_out_sorted2, color="lightgray", boxprops=dict(facecolor='gray'))
-plt.show()
-print(sem_out_sorted2)
-
-print ("------------------------------------------------------------------------------")
-print ("                               gerando gráfico                                ")
-print ("                   comparando sequencias com e sem outliers                   ")
-print ("                                     de HA                                    ")
-print ("------------------------------------------------------------------------------")
-com_out_sorted = com_out_sorted.drop(columns=["ID", "Segment"])
-sem_out_sorted = sem_out_sorted.drop(columns=["ID", "Segment"])
-comparacao = pd.DataFrame({
-    "sem_out": sem_out_sorted.mean(),
-    "com_out": com_out_sorted.mean()
-})
-
-comparacao.plot(kind="bar", color=["gray", "black"], alpha=0.8)
-plt.xlabel("Códons")
-plt.ylabel("Contagem Média")
-plt.title("Comparação de Média de Códons com e sem Outliers (HA)")
-plt.xticks(rotation=90)
-plt.legend()
-plt.tight_layout()
-plt.show()
-
-
-
-print ("------------------------------------------------------------------------------")
-print ("                               gerando gráfico                                ")
-print ("                   comparando sequencias com e sem outliers                   ")
-print ("                                     de NA                                    ")
-print ("------------------------------------------------------------------------------")
-com_out_sorted2 = com_out_sorted2.drop(columns=["ID", "Segment"])
-sem_out_sorted2 = sem_out_sorted2.drop(columns=["ID", "Segment"])
-comparacao2 = pd.DataFrame({
-    "sem_out": sem_out_sorted2.mean(),
-    "com_out": com_out_sorted2.mean()
-})
-
-comparacao2.plot(kind="bar", color=["gray", "black"], alpha=0.8)
-plt.xlabel("Códons")
-plt.ylabel("Contagem Média")
-plt.title("Comparação de Média de Códons com e sem Outliers (NA)")
-plt.xticks(rotation=90)
-plt.legend()
-plt.tight_layout()
-plt.show()
-
-print ("------------------------------------------------------------------------------")
-print ("                             Gerando arquivo fasta                            ")
-print ("                     Para  analisar sequências com outliers                   ")
-print ("------------------------------------------------------------------------------")
-sequencias_com_out_fasta = df[df['ID'].isin(df_com_out['ID'])]
-output_path = os.path.join(download_path, "filtrado.fa")
-with open(output_path, "w") as f:  # usa o caminho correto aqui
-    for _, row in sequencias_com_out_fasta.iterrows():
-        f.write(f">{row['ID']}\n{row['Sequence']}\n")
-        print(f"Arquivo FASTA salvo em: {output_path}")
+if __name__ == "__main__":
+    main()

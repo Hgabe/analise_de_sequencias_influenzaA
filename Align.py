@@ -6,18 +6,11 @@ import os
 import re
 from multiprocessing import Pool, cpu_count # NOVO
 
-# --------------------------
-# CONFIGURAÇÕES DO USUÁRIO
-# --------------------------
 
-# PASTA ONDE ESTÃO SUAS REFSEQS
 PASTA_REFSEQS = "D:/sequencias para alinhamento" 
 
-# PASTA ONDE ESTÃO SEUS ARQUIVOS DE DADOS COMBINADOS
 PASTA_ARQUIVOS_DE_DADOS = "D:/codigopython/progressdocodigo/FastaCombinados" 
 
-# 2. DEFINIÇÃO DAS REFSEQS DE FALLBACK (H7N9)
-# Estes caminhos são gerados automaticamente se PASTA_REFSEQS estiver correta
 REFSEQ_FALLBACK_HA = os.path.join(PASTA_REFSEQS, "(HA)(H7N9)NC_026425.fasta")
 REFSEQ_FALLBACK_NA = os.path.join(PASTA_REFSEQS, "(NA)(H7N9)NC_026429.fasta")
 
@@ -27,27 +20,22 @@ MAPA_FALLBACK = {
     "NA": REFSEQ_FALLBACK_NA
 }
 
-# Pasta onde os alinhamentos finais serão salvos
 PASTA_SAIDA = "Alinhamentos_Finais_RefBased"
 
-# --------------------------
-# PARÂMETROS DE ALINHAMENTO
-# --------------------------
+# ----------------------------#
+#  PARÂMETROS DE ALINHAMENTO  #
+# ----------------------------#
+
 MATCH_SCORE = 4 #2 #teste2: 4
 MISMATCH_SCORE = -4 
-GAP_OPEN_PENALTY = -40  #teste2: -10 #dobrei de novo esse e o extend
-GAP_EXTEND_PENALTY = -12 #-0.5 (testar com -1.5)#teste2: -3
+GAP_OPEN_PENALTY = -40  #teste2: -20 (dobrei de novo esse e o extend)
+GAP_EXTEND_PENALTY = -12 #teste2: -6
 
-# --------------------------
-# FUNÇÕES
-# --------------------------
+# --------------------------#
+#           FUNÇÕES         #
+# --------------------------#
 
 def extrair_subtipo_e_segmento(filename):
-    """
-    CORRIGIDO: Extrai o segmento ('HA' ou 'NA') e o subtipo ('H1N1', 'H10N1', etc.) 
-    do nome do arquivo de dados, suportando 1 ou 2 dígitos (H10, H11, etc.).
-    Padrões esperados: HxNy(Segmento)_todos.fa
-    """
     nome_base = os.path.basename(filename)
     # REGEX : [Hh]\d{1,2} e [Nn]\d{1,2} para suportar H1, H10, H11, etc.
     match = re.search(r"([Hh]\d{1,2}[Nn]\d{1,2})\s*\((HA|NA)\)", nome_base, re.IGNORECASE)
@@ -60,7 +48,6 @@ def extrair_subtipo_e_segmento(filename):
 
 
 def encontrar_refseq_especifica(segmento, subtipo, pasta_refseqs):
-    """Procura a RefSeq específica na pasta usando o padrão de nome do arquivo: (HA)(H1N1)NC_..."""
     padrao = re.compile(f"\\({segmento}\\)\\({subtipo}\\)NC_.*\\.fasta", re.IGNORECASE)
     
     for filename in os.listdir(pasta_refseqs):
@@ -69,7 +56,6 @@ def encontrar_refseq_especifica(segmento, subtipo, pasta_refseqs):
     return None
 
 def alinha_par_com_referencia(ref_seq, target_seq):
-    """Realiza o alinhamento de uma sequência alvo contra a referência."""
     alignments = pairwise2.align.globalms(
         ref_seq, 
         target_seq, 
@@ -80,25 +66,16 @@ def alinha_par_com_referencia(ref_seq, target_seq):
     )
     return alignments[0][1] 
 
-
-# Nova função de trabalho para o pool de processos (Recebida do usuário)
 def processar_arquivo_de_dados(arquivo_dados):
-    """
-    Função que executa o fluxo completo de alinhamento para um único arquivo de dados.
-    Projetada para ser executada em paralelo.
-    """
     nome_arquivo = os.path.basename(arquivo_dados)
-    # CHAMA A FUNÇÃO CORRIGIDA
     segmento, subtipo = extrair_subtipo_e_segmento(nome_arquivo) 
     
     if not segmento or not subtipo:
         return f"\nAVISO: Padrão não reconhecido no arquivo {nome_arquivo}. Pulando."
 
-    # A impressão é importante para feedback, mas pode estar misturada devido à paralelização
     print(f"\n--- Processando {subtipo} ({segmento}) ---")
     
     try:
-        # 1. Carrega a referência (Condicional)
         ref_path = encontrar_refseq_especifica(segmento, subtipo, PASTA_REFSEQS)
         
         if ref_path:
@@ -113,17 +90,14 @@ def processar_arquivo_de_dados(arquivo_dados):
         if not os.path.exists(ref_path):
              return f"ERRO FATAL: Arquivo de referência não encontrado em {ref_path}"
         
-        # Carrega a RefSeq e a sequência pura
+   
         ref_record = SeqIO.read(ref_path, "fasta")
         ref_seq = str(ref_record.seq)
-        
         arquivo_saida = os.path.join(PASTA_SAIDA, f"{subtipo}_{segmento}_ALINHADO_RefBased.fasta")
-        
-        # 2. Processo de alinhamento e escrita no arquivo
+
         SeqIO.write(ref_record, arquivo_saida, "fasta")
         sequencias_alinhadas = []
-        
-        # O alinhamento real das sequências de dados contra a RefSeq
+
         for record in SeqIO.parse(arquivo_dados, "fasta"):
             if record.id != ref_record.id: 
                 aligned_seq = alinha_par_com_referencia(ref_seq, str(record.seq))
@@ -139,37 +113,29 @@ def processar_arquivo_de_dados(arquivo_dados):
         with open(arquivo_saida, "a") as output_handle:
             SeqIO.write(sequencias_alinhadas, output_handle, "fasta")
 
-        return f"Alinhamento para {subtipo} ({segmento}) concluído! Salvo em {arquivo_saida}"
+        return f"Alinhamento para {subtipo} ({segmento}) salvo em {arquivo_saida}"
         
     except Exception as e:
-        return f"ERRO INESPERADO no processamento de {arquivo_dados}: {e}"
+        return f"ERRO no processamento de {arquivo_dados}: {e}"
 
-# ---------------------------------#
-# PROCESSO PRINCIPAL (PARALELIZADO)----> ta paralelizado para reduzir o tempo, antes eu tinha deixado a noite toda e travou em h1n1
-# ---------------------------------#
+# ----------------------------------#
+# PROCESSO PRINCIPAL (PARALELIZADO) #
+# ----------------------------------#
 
 if __name__ == '__main__':
-    # Cria a pasta de saída
     os.makedirs(PASTA_SAIDA, exist_ok=True)
-
-    # 1. Lista todos os arquivos .fasta na pasta de dados
     arquivos_de_dados = [
         os.path.join(PASTA_ARQUIVOS_DE_DADOS, f) 
         for f in os.listdir(PASTA_ARQUIVOS_DE_DADOS) 
         if f.endswith(('.fasta', '.fa'))
     ]
-
-    # 2. Define o número de processos para usar (metade dos cores para poupar RAM)
     NUM_PROCESSOS = max(1, cpu_count() // 2) 
-    print(f"\nUsando {NUM_PROCESSOS} processos paralelos para acelerar o alinhamento...")
+    print(f"\nUsando {NUM_PROCESSOS} processos paralelos")
     
-    # 3. Executa o pool de processos
     with Pool(NUM_PROCESSOS) as pool:
-        # Mapeia a função de processamento para a lista de arquivos de dados
         resultados = pool.map(processar_arquivo_de_dados, arquivos_de_dados)
     
-    # 4. Imprime os resultados de cada processo
     for resultado in resultados:
         print(resultado)
 
-    print("\n--- Processo de Alinhamento Baseado em Referência Concluído. ---")
+    print("\nProcesso de Alinhamento Baseado em Referência Concluído")
